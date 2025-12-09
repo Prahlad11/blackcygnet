@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Lead, LeadStatus } from '../types';
 import { Button } from './Button';
 import { generateCallScript } from '../services/geminiService';
-import { X, Phone, Calendar, Clock, Ban, Sparkles, Loader2, ExternalLink, PhoneMissed, Fingerprint } from 'lucide-react';
+import { X, Phone, Calendar, Clock, Ban, Sparkles, Loader2, ExternalLink, PhoneMissed, Fingerprint, ArrowLeft, CalendarCheck } from 'lucide-react';
 
 interface CallModalProps {
   lead: Lead;
@@ -16,10 +16,20 @@ export const CallModal: React.FC<CallModalProps> = ({ lead, userName, onClose, o
   const [isLoadingScript, setIsLoadingScript] = useState(false);
   const [notes, setNotes] = useState(lead.notes || '');
 
+  // Scheduling State
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('10:00');
+
   useEffect(() => {
     if (process.env.API_KEY) {
       handleGenerateScript();
     }
+    
+    // Default date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setScheduleDate(tomorrow.toISOString().split('T')[0]);
   }, [lead]);
 
   const handleGenerateScript = async () => {
@@ -29,18 +39,34 @@ export const CallModal: React.FC<CallModalProps> = ({ lead, userName, onClose, o
     setIsLoadingScript(false);
   };
 
-  const handleBooked = () => {
+  const handleConfirmBooking = () => {
+    if (!scheduleDate || !scheduleTime) {
+      alert("Please select a valid date and time.");
+      return;
+    }
+
+    const startDateTime = new Date(`${scheduleDate}T${scheduleTime}`);
+    const endDateTime = new Date(startDateTime.getTime() + 30 * 60000); // Default 30 min duration
+
     const subject = encodeURIComponent(`Life Insurance Consultation - ${lead.name} / Black Cygnet`);
-    const body = encodeURIComponent(`Lead Details:\nName: ${lead.name}\nPhone: ${lead.phone}\nID Number: ${lead.idNumber || 'N/A'}\n\nNotes:\n${notes}\n\nDiscussion: Life Insurance Options - Black Cygnet`);
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(10, 0, 0, 0);
-    const startDt = tomorrow.toISOString();
+    const body = encodeURIComponent(
+      `Lead Details:\n` +
+      `Name: ${lead.name}\n` +
+      `Phone: ${lead.phone}\n` +
+      `ID Number: ${lead.idNumber || 'N/A'}\n\n` +
+      `Notes:\n${notes}\n\n` +
+      `Discussion: Life Insurance Options - Black Cygnet`
+    );
     
-    const outlookUrl = `https://outlook.live.com/calendar/0/deeplink/compose?subject=${subject}&body=${body}&startdt=${startDt}`;
+    const startDt = startDateTime.toISOString();
+    const endDt = endDateTime.toISOString();
+    
+    const outlookUrl = `https://outlook.live.com/calendar/0/deeplink/compose?subject=${subject}&body=${body}&startdt=${startDt}&enddt=${endDt}`;
     
     window.open(outlookUrl, '_blank');
-    onUpdateStatus(lead.id, LeadStatus.BOOKED, notes);
+    
+    const updatedNotes = notes + `\n[System]: Booked consultation for ${startDateTime.toLocaleString()}`;
+    onUpdateStatus(lead.id, LeadStatus.BOOKED, updatedNotes);
     onClose();
   };
 
@@ -113,81 +139,142 @@ export const CallModal: React.FC<CallModalProps> = ({ lead, userName, onClose, o
           </div>
         </div>
 
-        {/* Right Panel: Script & Actions */}
-        <div className="w-full md:w-2/3 p-6 flex flex-col bg-white dark:bg-zinc-900/50 transition-colors duration-300">
+        {/* Right Panel: Script & Actions OR Scheduler */}
+        <div className="w-full md:w-2/3 p-6 flex flex-col bg-white dark:bg-zinc-900/50 transition-colors duration-300 relative">
+          
+          {/* Header */}
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-semibold flex items-center gap-2 text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
-              <Sparkles className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
-              AI Assistant
+              {isScheduling ? (
+                <>
+                  <Calendar className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
+                  Schedule Consultation
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
+                  AI Assistant
+                </>
+              )}
             </h3>
             <button onClick={onClose} className="text-zinc-400 dark:text-zinc-500 hover:text-black dark:hover:text-white transition-colors p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full">
               <X className="w-6 h-6" />
             </button>
           </div>
 
+          {/* Content Area */}
           <div className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 overflow-y-auto shadow-inner mb-6 relative">
-            {isLoadingScript ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-50/90 dark:bg-zinc-950/90 z-10 backdrop-blur-sm">
-                <Loader2 className="w-8 h-8 text-black dark:text-white animate-spin mb-3" />
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium uppercase tracking-widest">Generating Strategy...</p>
-              </div>
-            ) : script ? (
-              <div className="prose prose-sm prose-zinc dark:prose-invert max-w-none text-zinc-800 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
-                {script}
+            
+            {isScheduling ? (
+              <div className="flex flex-col items-center justify-center h-full max-w-sm mx-auto space-y-6 animate-fade-in-up">
+                <div className="text-center space-y-2">
+                   <div className="bg-emerald-100 dark:bg-emerald-900/30 p-4 rounded-full inline-block mb-2">
+                      <CalendarCheck className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+                   </div>
+                   <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Book Appointment</h3>
+                   <p className="text-sm text-zinc-500 dark:text-zinc-400">Select a date and time to open Outlook Calendar.</p>
+                </div>
+
+                <div className="w-full space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Date</label>
+                    <input 
+                      type="date" 
+                      className="w-full p-3 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white"
+                      value={scheduleDate}
+                      onChange={(e) => setScheduleDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Time</label>
+                    <input 
+                      type="time" 
+                      className="w-full p-3 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white"
+                      value={scheduleTime}
+                      onChange={(e) => setScheduleTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 w-full mt-4">
+                  <Button variant="outline" className="flex-1" onClick={() => setIsScheduling(false)}>
+                    Back
+                  </Button>
+                  <Button variant="success" className="flex-1" onClick={handleConfirmBooking}>
+                    Confirm Booking
+                  </Button>
+                </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-zinc-500">
-                <p>Click generate to get an AI-powered script tailored for this client.</p>
-                <Button variant="secondary" size="sm" onClick={handleGenerateScript} className="mt-4">
-                  Generate Script
-                </Button>
-              </div>
+              // AI Script View
+              <>
+                {isLoadingScript ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-50/90 dark:bg-zinc-950/90 z-10 backdrop-blur-sm">
+                    <Loader2 className="w-8 h-8 text-black dark:text-white animate-spin mb-3" />
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium uppercase tracking-widest">Generating Strategy...</p>
+                  </div>
+                ) : script ? (
+                  <div className="prose prose-sm prose-zinc dark:prose-invert max-w-none text-zinc-800 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                    {script}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-zinc-500">
+                    <p>Click generate to get an AI-powered script tailored for this client.</p>
+                    <Button variant="secondary" size="sm" onClick={handleGenerateScript} className="mt-4">
+                      Generate Script
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-t border-zinc-200 dark:border-zinc-800 pt-6">
-            <Button 
-              variant="outline" 
-              className="flex-col h-auto py-3 text-zinc-500 border-zinc-300 hover:bg-zinc-100 hover:text-black dark:text-zinc-400 dark:border-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-white"
-              onClick={() => {
-                onUpdateStatus(lead.id, LeadStatus.RESCHEDULED, notes);
-                onClose();
-              }}
-            >
-              <Clock className="w-5 h-5 mb-1.5" />
-              <span className="text-[10px] uppercase font-bold tracking-wider">Reschedule</span>
-            </Button>
+          {/* Actions - Only show if not scheduling */}
+          {!isScheduling && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-t border-zinc-200 dark:border-zinc-800 pt-6">
+              <Button 
+                variant="outline" 
+                className="flex-col h-auto py-3 text-zinc-500 border-zinc-300 hover:bg-zinc-100 hover:text-black dark:text-zinc-400 dark:border-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-white"
+                onClick={() => {
+                  onUpdateStatus(lead.id, LeadStatus.RESCHEDULED, notes);
+                  onClose();
+                }}
+              >
+                <Clock className="w-5 h-5 mb-1.5" />
+                <span className="text-[10px] uppercase font-bold tracking-wider">Reschedule</span>
+              </Button>
 
-            <Button 
-              variant="warning" 
-              className="flex-col h-auto py-3"
-              onClick={handleNoAnswer}
-            >
-              <PhoneMissed className="w-5 h-5 mb-1.5 text-white" />
-              <span className="text-white text-[10px] uppercase font-bold tracking-wider">No Answer</span>
-            </Button>
+              <Button 
+                variant="warning" 
+                className="flex-col h-auto py-3"
+                onClick={handleNoAnswer}
+              >
+                <PhoneMissed className="w-5 h-5 mb-1.5 text-white" />
+                <span className="text-white text-[10px] uppercase font-bold tracking-wider">No Answer</span>
+              </Button>
 
-            <Button 
-              variant="danger" 
-              className="flex-col h-auto py-3"
-              onClick={() => {
-                onUpdateStatus(lead.id, LeadStatus.CANCELLED, notes);
-                onClose();
-              }}
-            >
-              <Ban className="w-5 h-5 mb-1.5 text-white" />
-              <span className="text-white text-[10px] uppercase font-bold tracking-wider">Cancel</span>
-            </Button>
+              <Button 
+                variant="danger" 
+                className="flex-col h-auto py-3"
+                onClick={() => {
+                  onUpdateStatus(lead.id, LeadStatus.CANCELLED, notes);
+                  onClose();
+                }}
+              >
+                <Ban className="w-5 h-5 mb-1.5 text-white" />
+                <span className="text-white text-[10px] uppercase font-bold tracking-wider">Cancel</span>
+              </Button>
 
-            <Button 
-              variant="success" 
-              className="flex-col h-auto py-3"
-              onClick={handleBooked}
-            >
-              <Calendar className="w-5 h-5 mb-1.5 text-white" />
-              <span className="text-white text-[10px] uppercase font-bold tracking-wider">Book</span>
-            </Button>
-          </div>
+              <Button 
+                variant="success" 
+                className="flex-col h-auto py-3"
+                onClick={() => setIsScheduling(true)}
+              >
+                <Calendar className="w-5 h-5 mb-1.5 text-white" />
+                <span className="text-white text-[10px] uppercase font-bold tracking-wider">Book</span>
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
