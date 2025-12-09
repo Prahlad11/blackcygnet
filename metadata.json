@@ -1,0 +1,5 @@
+{
+  "name": "CallFlow AI",
+  "description": "An intelligent sales dialer application that imports leads from Excel, generates AI-powered call scripts, and integrates with Outlook for scheduling.",
+  "requestFramePermissions": []
+}
